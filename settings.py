@@ -1,0 +1,13 @@
+# settings.py
+
+# Configurações da Tela
+SCREEN_WIDTH, SCREEN_HEIGHT = 800, 600
+FPS = 120
+
+# Cores
+SKY_BLUE = (135, 206, 235); GRASS_GREEN = (34, 139, 34); BLACK = (0, 0, 0)
+WHITE = (255, 255, 255); RED = (200, 0, 0); GREEN = (0, 200, 0)
+YELLOW = (255, 255, 0); BLUE = (0, 0, 200); PURPLE = (128, 0, 128)
+ORANGE = (255, 165, 0); GREY = (128, 128, 128); STEEL = (176, 196, 222)
+FIRE_RED = (255, 69, 0); CYAN = (0, 255, 255); MAGENTA = (255, 0, 255)
+XP_COLOR = (100, 100, 255)
