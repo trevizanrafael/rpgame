@@ -88,3 +88,5 @@ def handle_collisions(player, enemies, bosses, projectiles, sounds):
             cloud.damage_player(player)
 
     return score_change, kills_change
+
+    #teste github
