@@ -12,7 +12,8 @@ from particles import Particle
 
 # --- Variáveis Globais de Estado ---
 player, enemies, bosses, projectiles, score, kills = None, None, None, None, 0, 0
-game_state, current_boss = 'PLAYING', None; current_music = None
+game_state, current_boss = 'MENU', None  # Agora inicia no MENU
+current_music = None
 spawned_bosses = set()
 upgrade_cards = pygame.sprite.Group()
 
@@ -35,7 +36,6 @@ def play_music(track):
     
     if file:
         try:
-            # ALTERADO: Removida a subpasta 'music' do caminho
             full_path = os.path.join('assets', file)
             pygame.mixer.music.load(full_path)
             pygame.mixer.music.set_volume(0.5)
@@ -54,7 +54,9 @@ def reset_game():
         'enemy': pygame.sprite.Group(), 'environment': pygame.sprite.Group(),
         'vfx': pygame.sprite.Group(), 'enemy_explosions': pygame.sprite.Group()
     }
-    score, kills = 0, 0; game_state = 'PLAYING'; current_boss = None
+    score, kills = 0, 0
+    # NÃO alteramos o game_state aqui para permitir controlar fora (MENU, etc.)
+    current_boss = None
     spawned_bosses = set(); play_music('background'); upgrade_cards.empty()
 
 def get_available_enemies(player_level):
@@ -64,7 +66,7 @@ def get_available_enemies(player_level):
     return enemy_pool
 
 def handle_state_transitions(boss_spawn_triggers):
-    global game_state, current_boss, spawned_bosses, kills, score, player
+    global game_state, current_boss, spawned_bosses, kills, score, player, spawn_event
     if game_state == 'PLAYING':
         for k, boss_class in boss_spawn_triggers.items():
             if kills >= k and boss_class not in spawned_bosses:
@@ -85,55 +87,105 @@ def main():
     
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
     world_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT))
-    pygame.display.set_caption("Action RPG - Reverted")
+    pygame.display.set_caption("Action RPG - Menu + Opções")
     clock, font = pygame.time.Clock(), pygame.font.Font(None, 36)
     
     sounds = load_sounds()
     grass_tile = ui.load_sprite('grama.png', (64,64))
     boss_spawn_triggers = {2: TitanusRex, 4: Morgana, 7: Draken}
-    reset_game()
     
     spawn_event, SHAKE_EVENT = pygame.USEREVENT + 1, pygame.USEREVENT + 2
     pygame.time.set_timer(spawn_event, 2000)
     shake_timer, shake_magnitude = 0, 0
     running = True; cycle_timer = 0
 
+    # Estados de seleção para menus
+    menu_selected = 0
+    gameover_selected = 0
+
+    # Música do menu (reutiliza 'background' por segurança)
+    play_music('background')
+
     while running:
         dt = clock.tick(FPS)
-        
         events = pygame.event.get()
-        for event in events:
-            if event.type == pygame.QUIT: running = False
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
-                    if game_state in ['PLAYING', 'BOSS_FIGHT']: game_state = 'PAUSED'
-                    elif game_state == 'PAUSED': game_state = 'PLAYING' if not current_boss else 'BOSS_FIGHT'
-                if event.key == pygame.K_p: reset_game()
-            if event.type == SHAKE_EVENT: shake_timer, shake_magnitude = event.duration, event.magnitude
 
-            if game_state == 'LEVEL_UP':
-                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                    for card in upgrade_cards:
-                        if card.rect.collidepoint(event.pos):
-                            player.apply_upgrade(card.upgrade_id)
-                            game_state = 'PLAYING' if not current_boss else 'BOSS_FIGHT'
-                            upgrade_cards.empty()
-                            break
-                continue
-            
-            if game_state in ['PLAYING', 'BOSS_FIGHT'] and player.hp > 0:
-                if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                    projectiles['player'].add(Arrow(player.rect.center, pygame.mouse.get_pos())); sounds['shoot'].play()
+        # ---- INPUT POR ESTADO ----
+        if game_state == 'MENU':
+            for event in events:
+                if event.type == pygame.QUIT: running = False
                 if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_q: player.valkyrie.activate(player, projectiles, sounds)
-                    if event.key == pygame.K_e: player.shield.activate(player, projectiles, sounds)
-                    if event.key == pygame.K_f: player.thunder_leap.activate(player, projectiles, sounds)
-                    if event.key == pygame.K_r: player.phoenix_call.activate(player, projectiles, sounds)
+                    if event.key in (pygame.K_UP, pygame.K_w): menu_selected = (menu_selected - 1) % 3
+                    if event.key in (pygame.K_DOWN, pygame.K_s): menu_selected = (menu_selected + 1) % 3
+                    if event.key in (pygame.K_RETURN, pygame.K_SPACE):
+                        if menu_selected == 0:  # Iniciar
+                            reset_game()
+                            game_state = 'PLAYING'
+                        elif menu_selected == 1:  # Opções
+                            game_state = 'OPTIONS'
+                        elif menu_selected == 2:  # Sair
+                            running = False
 
-            if event.type == spawn_event and game_state == 'PLAYING':
-                enemy_class = random.choice(get_available_enemies(player.level))
-                enemies.add(enemy_class((SCREEN_WIDTH, SCREEN_HEIGHT), ui.is_night(cycle_timer)))
+        elif game_state == 'OPTIONS':
+            for event in events:
+                if event.type == pygame.QUIT: running = False
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                    game_state = 'MENU'
 
+        elif game_state == 'GAME_OVER':
+            for event in events:
+                if event.type == pygame.QUIT: running = False
+                if event.type == pygame.KEYDOWN:
+                    if event.key in (pygame.K_UP, pygame.K_w): gameover_selected = (gameover_selected - 1) % 2
+                    if event.key in (pygame.K_DOWN, pygame.K_s): gameover_selected = (gameover_selected + 1) % 2
+                    if event.key in (pygame.K_RETURN, pygame.K_SPACE):
+                        if gameover_selected == 0:  # Reiniciar
+                            reset_game(); game_state = 'PLAYING'
+                        else:  # Voltar ao Menu
+                            game_state = 'MENU'
+                    if event.key == pygame.K_p:  # compatibilidade com atalho antigo
+                        reset_game(); game_state = 'PLAYING'
+
+        else:
+            # PLAYING, BOSS_FIGHT, LEVEL_UP, PAUSED
+            for event in events:
+                if event.type == pygame.QUIT: running = False
+                if event.type == SHAKE_EVENT: shake_timer, shake_magnitude = event.duration, event.magnitude
+
+                if event.type == pygame.KEYDOWN:
+                    # Toggle Pause apenas quando em gameplay ou pausa
+                    if event.key == pygame.K_ESCAPE:
+                        if game_state in ['PLAYING', 'BOSS_FIGHT']:
+                            game_state = 'PAUSED'
+                        elif game_state == 'PAUSED':
+                            game_state = 'PLAYING' if not current_boss else 'BOSS_FIGHT'
+                    if event.key == pygame.K_p and game_state != 'LEVEL_UP':  # Reiniciar rápido
+                        reset_game(); game_state = 'PLAYING'
+
+                if game_state == 'LEVEL_UP':
+                    if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                        for card in upgrade_cards:
+                            if card.rect.collidepoint(event.pos):
+                                player.apply_upgrade(card.upgrade_id)
+                                game_state = 'PLAYING' if not current_boss else 'BOSS_FIGHT'
+                                upgrade_cards.empty()
+                                break
+                    continue
+                
+                if game_state in ['PLAYING', 'BOSS_FIGHT'] and player.hp > 0:
+                    if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                        projectiles['player'].add(Arrow(player.rect.center, pygame.mouse.get_pos())); sounds['shoot'].play()
+                    if event.type == pygame.KEYDOWN:
+                        if event.key == pygame.K_q: player.valkyrie.activate(player, projectiles, sounds)
+                        if event.key == pygame.K_e: player.shield.activate(player, projectiles, sounds)
+                        if event.key == pygame.K_f: player.thunder_leap.activate(player, projectiles, sounds)
+                        if event.key == pygame.K_r: player.phoenix_call.activate(player, projectiles, sounds)
+
+                if event.type == spawn_event and game_state == 'PLAYING':
+                    enemy_class = random.choice(get_available_enemies(player.level))
+                    enemies.add(enemy_class((SCREEN_WIDTH, SCREEN_HEIGHT), ui.is_night(cycle_timer)))
+
+        # ---- UPDATE POR ESTADO ----
         if game_state in ['PLAYING', 'BOSS_FIGHT']:
             cycle_timer += dt
             handle_state_transitions(boss_spawn_triggers)
@@ -158,26 +210,40 @@ def main():
 
             if player.hp <= 0: game_state = 'GAME_OVER'; sounds['game_over'].play()
 
-        world_surface.fill(BLACK)
-        ui.draw_background(world_surface, grass_tile)
-        player.draw(world_surface)
+        # ---- DRAW ----
+        screen.fill(BLACK)
+        if game_state in ['PLAYING', 'BOSS_FIGHT', 'LEVEL_UP', 'PAUSED', 'GAME_OVER']:
+            # Render do mundo
+            if not player:
+                # Se o usuário entrar em PLAYING pela primeira vez
+                reset_game()
+            world_surface.fill(BLACK)
+            ui.draw_background(world_surface, grass_tile)
+            player.draw(world_surface)
 
-        for group in [enemies, bosses, *projectiles.values()]:
-            for sprite in group:
-                if hasattr(sprite, 'draw'): sprite.draw(world_surface)
-        ui.draw_day_night_cycle(world_surface, cycle_timer, player)
-        render_offset = [0, 0]
-        if shake_timer > 0: shake_timer -= dt; render_offset = [random.randint(-shake_magnitude, shake_magnitude) for _ in range(2)]
-        screen.fill(BLACK); screen.blit(world_surface, render_offset)
-        
-        ui.draw_hud(screen, player, score, kills, font, clock.get_fps())
-        if game_state == 'BOSS_FIGHT':
-            ui.draw_boss_health_bar(screen, current_boss); ui.draw_boss_prompt(screen, font)
-        
-        if game_state == 'GAME_OVER': ui.draw_game_over(screen, font)
-        elif game_state == 'PAUSED': ui.draw_pause(screen, font)
-        elif game_state == 'LEVEL_UP': ui.draw_level_up_screen(screen, font, upgrade_cards)
-        
+            for group in [enemies, bosses, *projectiles.values()]:
+                for sprite in group:
+                    if hasattr(sprite, 'draw'): sprite.draw(world_surface)
+
+            ui.draw_day_night_cycle(world_surface, cycle_timer, player)
+            render_offset = [0, 0]
+            if shake_timer > 0: shake_timer -= dt; render_offset = [random.randint(-shake_magnitude, shake_magnitude) for _ in range(2)]
+            screen.blit(world_surface, render_offset)
+            
+            ui.draw_hud(screen, player, score, kills, font, clock.get_fps())
+            if game_state == 'BOSS_FIGHT':
+                ui.draw_boss_health_bar(screen, current_boss); ui.draw_boss_prompt(screen, font)
+            
+            if game_state == 'GAME_OVER': ui.draw_game_over(screen, font, gameover_selected)
+            elif game_state == 'PAUSED': ui.draw_pause(screen, font)
+            elif game_state == 'LEVEL_UP': ui.draw_level_up_screen(screen, font, upgrade_cards)
+
+        elif game_state == 'MENU':
+            ui.draw_main_menu(screen, font, menu_selected)
+
+        elif game_state == 'OPTIONS':
+            ui.draw_options(screen, font)
+
         pygame.display.flip()
         
     pygame.quit()
